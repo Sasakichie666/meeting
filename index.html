@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>异世界约会物语 - 德式桌游</title>
+    <script src="https://unpkg.com/peerjs@1.5.1/dist/peerjs.min.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="game-container">
+        <div class="top-bar">
+            <div class="top-main lobby-panel">
+                <div class="lobby-section">
+                    <div class="lobby-row">
+                        <button class="btn btn-primary" id="btnCreateGame">🏰 创建</button>
+                        <button class="btn" id="btnJoinGame">🚪 加入</button>
+                        <span id="connectionStatus" class="status-badge status-disconnected">⚫ 未连接</span>
+                        <span id="roomInfo" style="display:none;"><span id="roomIdDisplay" class="room-id">---</span></span>
+                    </div>
+                    <div class="lobby-row" id="joinRow" style="display:none;">
+                        <input type="text" class="input-field" id="inputRoomId" placeholder="输入4位房间号" maxlength="4">
+                        <button class="btn btn-primary btn-small" id="btnConfirmJoin">确认</button>
+                        <button class="btn btn-small" id="btnCancelJoin">取消</button>
+                    </div>
+                    <div class="lobby-row">
+                        <div class="deck-info" id="deckInfo">
+                            <span>🃏 <span id="drawPileCount">0</span></span>
+                            <span>🗑️ <span id="discardPileCount">0</span></span>
+                        </div>
+                        <button class="btn btn-small" id="btnStartGame" disabled>🎲 开始</button>
+                        <button class="btn btn-small" id="btnEndSeason" disabled>⏳ 结束时代</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="players-panel">
+                <div class="players-section">
+                    <div class="players-header">
+                        <h3>👥 冒险者</h3>
+                        <span class="info-text" id="turnInfo">💡 等待...</span>
+                    </div>
+                    <div class="player-tags" id="playerList"></div>
+                </div>
+            </div>
+
+            <div class="season-panel">
+                <div class="season-icon" id="seasonIcon" title="春季">🌸</div>
+                <div class="season-desc" id="seasonDesc">万物复苏</div>
+            </div>
+        </div>
+
+        <div class="main-area">
+            <div class="map-and-sidebar">
+                <div class="track-container" id="trackContainer"></div>
+                <div class="character-panel" id="characterPanel"></div>
+                <div class="map-wrapper">
+                    <canvas id="gameMap" width="780" height="560"></canvas>
+                    <div class="hand-toggle-area">
+                        <button class="btn btn-small" id="btnToggleHand" title="手牌">🃏 手牌</button>
+                    </div>
+                    <div class="hand-panel" id="handPanel">
+                        <div class="hand-cards-container" id="handCardsContainer"></div>
+                    </div>
+                </div>
+                <div class="resource-sidebar" id="resourceSidebar">
+                    <h3 style="font-family: var(--font-title); color: var(--accent2); font-size: 0.9rem; margin-bottom: 4px;">📦 资源</h3>
+                </div>
+            </div>
+            <div class="players-boards" id="playersBoards"></div>
+            <div class="log-panel" id="logContainer"></div>
+        </div>
+    </div>
+
+    <div id="toastContainer"></div>
+    <div id="modalContainer"></div>
+
+    <!-- 基础模块 -->
+    <script src="network.js"></script>
+    <script src="board.js"></script>
+    <script src="cards/Ecards.js"></script>
+    <script src="effect/cardEffect.js"></script>
+    <script src="effect/location.js"></script>
+    <script src="effect/LocationActions.js"></script>
+    <script src="effect/locationUI.js"></script>
+    <script src="cardboard.js"></script>
+    <script src="character/characters.js"></script>
+    <script src="character/chaUI.js"></script>
+    <script src="character/chaManager.js"></script>
+    <script src="ui.js"></script>
+    <script src="track/PublicTrackUI.js"></script>
+    <script src="logSystem.js"></script>
+    <script src="cards.js"></script>
+    <script src="cards/TaskManager.js"></script>
+    <script src="cards/Tcards.js"></script>
+    <script src="cards/TcardsUI.js"></script>
+
+    <!-- 游戏逻辑模块（依赖顺序） -->
+    
+    <script src="games/TaskActionHandler.js"></script>
+    <script src="games/ResourceManager.js"></script>
+    <script src="games/SyncManager.js"></script>
+    <script src="games/PlayerManager.js"></script>
+    <script src="games/TurnManager.js"></script>
+    <script src="games/ActionExecutor.js"></script>
+    <script src="games/MoveHandler.js"></script>
+    <script src="games/CardActionHandler.js"></script>
+    <script src="games/NetworkEventHandler.js"></script>
+    <script src="games/SeasonManager.js"></script>
+    <script src="games/WorkspaceManager.js"></script>
+    <script src="games/FeastManager.js"></script>
+    <script src="games/TrackManager.js"></script>
+    <script src="games/ObserverManager.js"></script>
+
+    <!-- 主控 Game 类 -->
+    <script src="game.js"></script>
+
+    <!-- 音效模块 -->
+    <script src="sound/SoundManager.js"></script>
+    <script>
+        // 预加载所有音效（异步，不阻塞游戏）
+        window.soundManager.loadAll();
+    </script>
+
+    <script>
+        (function() {
+            const ui = new UIManager({
+                playerListId: 'playerList',
+                turnInfoId: 'turnInfo',
+                connectionStatusId: 'connectionStatus',
+                roomInfoId: 'roomInfo',
+                roomIdDisplayId: 'roomIdDisplay',
+                toastContainerId: 'toastContainer',
+                modalContainerId: 'modalContainer',
+                btnStartGame: document.getElementById('btnStartGame'),
+                btnEndSeason: document.getElementById('btnEndSeason')
+            });
+
+            const board = new Board('gameMap', {
+                onPlayerMoveRequest: null,
+                onStationClick: null
+            });
+
+            const network = new Network();
+            const game = new Game(network, board, ui);
+
+            document.getElementById('btnCreateGame').onclick = () => {
+                if (network.isConnected()) return ui.showToast('⚠️ 请先断开');
+                document.getElementById('joinRow').style.display = 'none';
+                network.createGame();
+            };
+            document.getElementById('btnJoinGame').onclick = () => {
+                if (network.isConnected()) return ui.showToast('⚠️ 请先断开');
+                document.getElementById('joinRow').style.display = 'flex';
+            };
+            document.getElementById('btnConfirmJoin').onclick = () => {
+                const id = document.getElementById('inputRoomId').value.trim();
+                if (!id) return ui.showToast('⚠️ 请输入房间号');
+                network.joinGame(id);
+                document.getElementById('joinRow').style.display = 'none';
+            };
+            document.getElementById('btnCancelJoin').onclick = () => document.getElementById('joinRow').style.display = 'none';
+            document.getElementById('btnStartGame').onclick = () => game.startGame();
+            document.getElementById('btnEndSeason').onclick = () => game.endSeason();
+            document.getElementById('inputRoomId').onkeydown = e => { if (e.key === 'Enter') document.getElementById('btnConfirmJoin').click(); };
+            window.addEventListener('keydown', e => { if (e.key === 'Escape') { board.clearHighlights(); game.isStationTeleporting = false; } });
+            window.addEventListener('beforeunload', () => {
+                if (network.isConnected()) {
+                    network.broadcast({
+                        type: 'player_left_update',
+                        peerId: game.localPlayerId,
+                        allPlayers: game.playerManager.getSerializablePlayers(),
+                        playerOrder: game.playerOrder.filter(id => id !== game.localPlayerId),
+                        currentTurnIndex: game.currentTurnIndex,
+                        hands: game.cardManager.getState().hands
+                    });
+                }
+            });
+
+            board.setCurrentTurn(null);
+            game.refreshUI();
+        })();
+    </script>
+</body>
+</html>
